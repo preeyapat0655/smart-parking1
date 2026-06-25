@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Smart Parking System</title>
+
+<style>
+body{
+    font-family: Arial;
+    text-align:center;
+    background:#f0f2f5;
+}
+
+h1{
+    margin-top:20px;
+}
+
+.parking{
+    display:grid;
+    grid-template-columns: repeat(2, 200px);
+    gap:20px;
+    justify-content:center;
+    margin-top:30px;
+}
+
+.slot{
+    height:150px;
+    border-radius:15px;
+    color:white;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    font-size:20px;
+    font-weight:bold;
+    cursor:pointer;
+    user-select:none;
+}
+
+.empty{ background:green; }
+.reserved{ background:orange; }
+.occupied{ background:red; }
+
+.small{
+    font-size:13px;
+    margin-top:5px;
+}
+</style>
+
+</head>
+
+<body>
+
+<h1>🚗 SMART PARKING SYSTEM</h1>
+
+<div class="parking">
+    <div id="A1" class="slot"></div>
+    <div id="A2" class="slot"></div>
+    <div id="A3" class="slot"></div>
+    <div id="A4" class="slot"></div>
+</div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getDatabase, ref, onValue, runTransaction } 
+from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "oooooo-57092.firebaseapp.com",
+  databaseURL: "https://oooooo-57092-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "oooooo-57092"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
+
+
+
+// =========================
+// 👤 USER ID (1 คน 1 ตัวตน)
+// =========================
+const myId = localStorage.getItem("userId") 
+    || Math.random().toString(36).substring(2);
+
+localStorage.setItem("userId", myId);
+
+
+
+// =========================
+// 🚗 จอง / ยกเลิก (ล็อกเจ้าของ)
+// =========================
+function toggleParking(slot){
+
+    const slotRef = ref(db,"Parking/"+slot);
+
+    runTransaction(slotRef,(data)=>{
+
+        if(!data){
+            return {
+                status:"reserved",
+                owner:myId,
+                startTime:Date.now()
+            };
+        }
+
+        if(data.status==="occupied"){
+            return data;
+        }
+
+        if(data.status==="reserved"){
+
+            if(data.owner !== myId){
+                return data;
+            }
+
+            return {
+                status:"empty",
+                owner:"",
+                startTime:0
+            };
+        }
+
+        if(data.status==="empty"){
+            return {
+                status:"reserved",
+                owner:myId,
+                startTime:Date.now()
+            };
+        }
+
+        return data;
+    });
+
+}
+
+window.toggleParking = toggleParking;
+
+
+
+// =========================
+// 📡 แสดงผล Real-time
+// =========================
+["A1","A2","A3","A4"].forEach(slot=>{
+
+    onValue(ref(db,"Parking/"+slot),(snap)=>{
+
+        const data = snap.val();
+        const div = document.getElementById(slot);
+
+        if(!data) return;
+
+        const isOwner = data.owner === myId;
+
+        div.onclick = ()=> toggleParking(slot);
+
+        // 🔴 occupied
+        if(data.status==="occupied"){
+            div.className="slot occupied";
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🔴 ไม่ว่าง</div>
+            `;
+        }
+
+        // 🟡 reserved
+        else if(data.status==="reserved"){
+            div.className="slot reserved";
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🟡 จองแล้ว</div>
+                <div class="small">
+                    ${isOwner ? "👤 ของคุณ (กดยกเลิกได้)" : "🔒 คนอื่นจอง"}
+                </div>
+            `;
+
+            // ❗ คนอื่นกดไม่ได้
+            div.onclick = isOwner ? ()=>toggleParking(slot) : null;
+        }
+
+        // 🟢 empty
+        else{
+            div.className="slot empty";
+            div.innerHTML=`
+                <div>${slot}</div>
+                <div>🟢 ว่าง</div>
+            `;
+        }
+
+    });
+
+});
+
+</script>
+
+</body>
+</html>
